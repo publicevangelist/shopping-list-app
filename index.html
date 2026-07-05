@@ -238,12 +238,23 @@
     </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <script>
-    let items = JSON.parse(localStorage.getItem('shopping') || '[]');
+    const SUPABASE_URL = 'https://eehlmijjrtorfdxfegeg.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_dYg0o9HTL2yIZ8xqlzvbIQ_9EdAzgR8';
+    const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    let items = [];
     let filter = 'all';
 
-    function save() {
-      localStorage.setItem('shopping', JSON.stringify(items));
+    async function loadItems() {
+      const { data, error } = await db
+        .from('shopping_items')
+        .select('*')
+        .order('id', { ascending: false });
+      if (error) { console.error(error); return; }
+      items = data;
+      render();
     }
 
     function render() {
@@ -278,30 +289,44 @@
       return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
-    function addItem() {
+    async function addItem() {
       const input = document.getElementById('input');
       const name = input.value.trim();
       if (!name) return;
-      items.unshift({ id: Date.now(), name, checked: false });
       input.value = '';
-      save();
+      const { data, error } = await db
+        .from('shopping_items')
+        .insert({ name })
+        .select()
+        .single();
+      if (error) { console.error(error); return; }
+      items.unshift(data);
       render();
     }
 
-    function toggle(id) {
+    async function toggle(id) {
       const item = items.find(i => i.id === id);
-      if (item) { item.checked = !item.checked; save(); render(); }
-    }
-
-    function remove(id) {
-      items = items.filter(i => i.id !== id);
-      save();
+      if (!item) return;
+      const checked = !item.checked;
+      const { error } = await db.from('shopping_items').update({ checked }).eq('id', id);
+      if (error) { console.error(error); return; }
+      item.checked = checked;
       render();
     }
 
-    function clearDone() {
+    async function remove(id) {
+      const { error } = await db.from('shopping_items').delete().eq('id', id);
+      if (error) { console.error(error); return; }
+      items = items.filter(i => i.id !== id);
+      render();
+    }
+
+    async function clearDone() {
+      const doneIds = items.filter(i => i.checked).map(i => i.id);
+      if (doneIds.length === 0) return;
+      const { error } = await db.from('shopping_items').delete().in('id', doneIds);
+      if (error) { console.error(error); return; }
       items = items.filter(i => !i.checked);
-      save();
       render();
     }
 
@@ -316,7 +341,7 @@
       if (e.key === 'Enter') addItem();
     });
 
-    render();
+    loadItems();
   </script>
 </body>
 </html>
