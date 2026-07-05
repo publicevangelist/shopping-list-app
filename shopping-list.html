@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>쇼핑 리스트</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f0f4f8;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      padding: 40px 16px;
+    }
+
+    .app {
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+      width: 100%;
+      max-width: 480px;
+      height: fit-content;
+      overflow: hidden;
+    }
+
+    .header {
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      padding: 28px 24px 20px;
+      color: #fff;
+    }
+
+    .header h1 {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+    }
+
+    .header .stats {
+      margin-top: 6px;
+      font-size: 13px;
+      opacity: 0.85;
+    }
+
+    .input-area {
+      padding: 20px 24px;
+      border-bottom: 1px solid #f0f0f0;
+      display: flex;
+      gap: 10px;
+    }
+
+    .input-area input {
+      flex: 1;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+      color: #1a202c;
+    }
+
+    .input-area input:focus { border-color: #667eea; }
+
+    .input-area input::placeholder { color: #a0aec0; }
+
+    .add-btn {
+      background: #667eea;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 10px 18px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+      white-space: nowrap;
+    }
+
+    .add-btn:hover { background: #5a67d8; }
+    .add-btn:active { transform: scale(0.97); }
+
+    .filter-tabs {
+      display: flex;
+      padding: 12px 24px 0;
+      gap: 4px;
+    }
+
+    .tab {
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      color: #718096;
+      background: transparent;
+      border: none;
+      transition: all 0.2s;
+    }
+
+    .tab.active {
+      background: #ebf4ff;
+      color: #667eea;
+    }
+
+    .list {
+      padding: 12px 24px 24px;
+      min-height: 120px;
+    }
+
+    .empty {
+      text-align: center;
+      color: #a0aec0;
+      font-size: 14px;
+      padding: 40px 0;
+    }
+
+    .empty .icon { font-size: 36px; margin-bottom: 10px; }
+
+    .item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 0;
+      border-bottom: 1px solid #f7fafc;
+      animation: slideIn 0.2s ease;
+    }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(-8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .item:last-child { border-bottom: none; }
+
+    .check-btn {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      border: 2px solid #cbd5e0;
+      background: transparent;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: all 0.2s;
+      font-size: 12px;
+      color: transparent;
+    }
+
+    .item.checked .check-btn {
+      background: #48bb78;
+      border-color: #48bb78;
+      color: #fff;
+    }
+
+    .item-name {
+      flex: 1;
+      font-size: 15px;
+      color: #2d3748;
+      transition: all 0.2s;
+      word-break: break-all;
+    }
+
+    .item.checked .item-name {
+      text-decoration: line-through;
+      color: #a0aec0;
+    }
+
+    .delete-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #cbd5e0;
+      font-size: 18px;
+      line-height: 1;
+      padding: 2px 4px;
+      border-radius: 6px;
+      transition: color 0.2s, background 0.2s;
+      flex-shrink: 0;
+    }
+
+    .delete-btn:hover { color: #fc8181; background: #fff5f5; }
+
+    .footer {
+      padding: 14px 24px;
+      border-top: 1px solid #f0f0f0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .clear-btn {
+      font-size: 12px;
+      color: #a0aec0;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 6px;
+      transition: all 0.2s;
+    }
+
+    .clear-btn:hover { color: #fc8181; background: #fff5f5; }
+
+    .progress-text {
+      font-size: 12px;
+      color: #a0aec0;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="header">
+      <h1>🛒 쇼핑 리스트</h1>
+      <div class="stats" id="stats">항목 없음</div>
+    </div>
+
+    <div class="input-area">
+      <input id="input" type="text" placeholder="아이템 입력 후 Enter" maxlength="60">
+      <button class="add-btn" onclick="addItem()">추가</button>
+    </div>
+
+    <div class="filter-tabs">
+      <button class="tab active" onclick="setFilter('all', this)">전체</button>
+      <button class="tab" onclick="setFilter('pending', this)">미완료</button>
+      <button class="tab" onclick="setFilter('done', this)">완료</button>
+    </div>
+
+    <div class="list" id="list"></div>
+
+    <div class="footer">
+      <button class="clear-btn" onclick="clearDone()">완료 항목 삭제</button>
+      <span class="progress-text" id="progress"></span>
+    </div>
+  </div>
+
+  <script>
+    let items = JSON.parse(localStorage.getItem('shopping') || '[]');
+    let filter = 'all';
+
+    function save() {
+      localStorage.setItem('shopping', JSON.stringify(items));
+    }
+
+    function render() {
+      const list = document.getElementById('list');
+      const filtered = items.filter(item =>
+        filter === 'all' ? true :
+        filter === 'done' ? item.checked :
+        !item.checked
+      );
+
+      if (filtered.length === 0) {
+        list.innerHTML = `<div class="empty"><div class="icon">${filter === 'done' ? '✅' : '🛍️'}</div>${filter === 'done' ? '완료된 항목 없음' : '아이템을 추가해보세요'}</div>`;
+      } else {
+        list.innerHTML = filtered.map(item => `
+          <div class="item ${item.checked ? 'checked' : ''}" id="item-${item.id}">
+            <button class="check-btn" onclick="toggle(${item.id})">✓</button>
+            <span class="item-name">${escHtml(item.name)}</span>
+            <button class="delete-btn" onclick="remove(${item.id})">×</button>
+          </div>
+        `).join('');
+      }
+
+      const total = items.length;
+      const done = items.filter(i => i.checked).length;
+      document.getElementById('stats').textContent =
+        total === 0 ? '항목 없음' : `${done}/${total}개 완료`;
+      document.getElementById('progress').textContent =
+        total > 0 ? `${Math.round(done / total * 100)}%` : '';
+    }
+
+    function escHtml(str) {
+      return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function addItem() {
+      const input = document.getElementById('input');
+      const name = input.value.trim();
+      if (!name) return;
+      items.unshift({ id: Date.now(), name, checked: false });
+      input.value = '';
+      save();
+      render();
+    }
+
+    function toggle(id) {
+      const item = items.find(i => i.id === id);
+      if (item) { item.checked = !item.checked; save(); render(); }
+    }
+
+    function remove(id) {
+      items = items.filter(i => i.id !== id);
+      save();
+      render();
+    }
+
+    function clearDone() {
+      items = items.filter(i => !i.checked);
+      save();
+      render();
+    }
+
+    function setFilter(f, btn) {
+      filter = f;
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      btn.classList.add('active');
+      render();
+    }
+
+    document.getElementById('input').addEventListener('keydown', e => {
+      if (e.key === 'Enter') addItem();
+    });
+
+    render();
+  </script>
+</body>
+</html>
