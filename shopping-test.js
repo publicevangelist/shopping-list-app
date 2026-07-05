@@ -5,6 +5,24 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FILE_URL = 'file:///' + path.join(__dirname, 'index.html').replace(/\\/g, '/');
 
+// index.html과 동일한 Supabase 프로젝트. REST 호출에는 PostgREST가 요구하는
+// legacy JWT anon 키를 사용 (신형 sb_publishable_ 키는 supabase-js를 통해서만 검증됨).
+const SUPABASE_URL = 'https://eehlmijjrtorfdxfegeg.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVlaGxtaWpqcnRvcmZkeGZlZ2VnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMxNjAzODcsImV4cCI6MjA5ODczNjM4N30.0mzls7nNwXzNo0tdqRjY82pHmvq7FshweBdbYnB2upg';
+
+// DB 반영 후 UI 렌더링까지 대기하는 시간 (Supabase 왕복 시간 고려)
+const DB_SYNC_WAIT = 800;
+
+async function clearDatabase() {
+  await fetch(`${SUPABASE_URL}/rest/v1/shopping_items?id=gt.0`, {
+    method: 'DELETE',
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+    },
+  });
+}
+
 let passed = 0;
 let failed = 0;
 
@@ -24,10 +42,31 @@ async function run() {
   const browser = await chromium.launch({ headless: false, slowMo: 400 });
   const page = await browser.newPage();
 
-  // localStorage 초기화
+  try {
+    await runScenarios(page);
+  } finally {
+    await page.waitForTimeout(1500);
+    await browser.close();
+    // 다음 실행 및 실제 앱 사용에 영향 없도록 테스트 데이터 정리
+    await clearDatabase();
+  }
+
+  const total = passed + failed;
+  console.log('\n' + '─'.repeat(40));
+  console.log(`📊 테스트 결과: ${passed}/${total} 통과`);
+  if (failed === 0) {
+    console.log('🎉 모든 테스트 통과!');
+  } else {
+    console.log(`⚠️  ${failed}개 실패`);
+  }
+  console.log('─'.repeat(40) + '\n');
+}
+
+async function runScenarios(page) {
+  // Supabase 테이블 초기화 후 앱 로드
+  await clearDatabase();
   await page.goto(FILE_URL);
-  await page.evaluate(() => localStorage.clear());
-  await page.reload();
+  await page.waitForTimeout(DB_SYNC_WAIT);
 
   // ──────────────────────────────────────────────
   console.log('\n📋 [1] 아이템 추가 테스트');
@@ -36,18 +75,21 @@ async function run() {
   // Enter 키로 추가
   await page.fill('#input', '우유');
   await page.press('#input', 'Enter');
+  await page.waitForTimeout(DB_SYNC_WAIT);
   let items = await page.$$('.item');
   await assert('Enter 키로 아이템 추가', items.length === 1);
 
   // 추가 버튼으로 추가
   await page.fill('#input', '달걀');
   await page.click('.add-btn');
+  await page.waitForTimeout(DB_SYNC_WAIT);
   items = await page.$$('.item');
   await assert('추가 버튼으로 아이템 추가', items.length === 2);
 
   // 세 번째 아이템
   await page.fill('#input', '빵');
   await page.press('#input', 'Enter');
+  await page.waitForTimeout(DB_SYNC_WAIT);
   items = await page.$$('.item');
   await assert('3개 아이템 존재', items.length === 3);
 
@@ -71,6 +113,7 @@ async function run() {
 
   // 첫 번째 아이템(빵) 체크
   await page.click('.item:first-child .check-btn');
+  await page.waitForTimeout(DB_SYNC_WAIT);
   const isChecked = await page.$('.item.checked');
   await assert('아이템 체크 시 checked 클래스 추가', isChecked !== null);
 
@@ -81,11 +124,13 @@ async function run() {
 
   // 체크 해제
   await page.click('.item.checked .check-btn');
+  await page.waitForTimeout(DB_SYNC_WAIT);
   const stillChecked = await page.$('.item.checked');
   await assert('다시 클릭 시 체크 해제', stillChecked === null);
 
   // stats 업데이트 확인
   await page.click('.item:first-child .check-btn');
+  await page.waitForTimeout(DB_SYNC_WAIT);
   const stats = await page.textContent('#stats');
   await assert('헤더 통계 업데이트 (1/3개 완료)', stats.includes('1/3'));
 
@@ -96,6 +141,7 @@ async function run() {
   // 미완료 아이템(달걀) 삭제 — 마지막 아이템
   const beforeDelete = await page.$$('.item');
   await page.click('.item:last-child .delete-btn');
+  await page.waitForTimeout(DB_SYNC_WAIT);
   const afterDelete = await page.$$('.item');
   await assert('삭제 후 아이템 수 감소 (3→2)', afterDelete.length === beforeDelete.length - 1);
 
@@ -137,6 +183,7 @@ async function run() {
   // ──────────────────────────────────────────────
 
   await page.click('.clear-btn');
+  await page.waitForTimeout(DB_SYNC_WAIT);
   const afterClear = await page.$$('.item');
   await assert('완료 항목 삭제 후 미완료만 남음 (1개)', afterClear.length === 1);
 
@@ -144,12 +191,14 @@ async function run() {
   await assert('미완료 아이템(달걀)은 유지', survivorText.trim() === '달걀');
 
   // ──────────────────────────────────────────────
-  console.log('\n💾 [6] localStorage 유지 테스트');
+  console.log('\n💾 [6] Supabase 데이터 유지 테스트');
   // ──────────────────────────────────────────────
 
   await page.fill('#input', '주스');
   await page.press('#input', 'Enter');
+  await page.waitForTimeout(DB_SYNC_WAIT);
   await page.reload();
+  await page.waitForTimeout(DB_SYNC_WAIT);
 
   const afterReload = await page.$$('.item');
   await assert('새로고침 후 아이템 유지', afterReload.length === 2);
@@ -159,22 +208,6 @@ async function run() {
   );
   await assert('새로고침 후 아이템 내용 동일',
     reloadTexts.includes('달걀') && reloadTexts.includes('주스'));
-
-  // ──────────────────────────────────────────────
-  // 결과 출력
-  // ──────────────────────────────────────────────
-  const total = passed + failed;
-  console.log('\n' + '─'.repeat(40));
-  console.log(`📊 테스트 결과: ${passed}/${total} 통과`);
-  if (failed === 0) {
-    console.log('🎉 모든 테스트 통과!');
-  } else {
-    console.log(`⚠️  ${failed}개 실패`);
-  }
-  console.log('─'.repeat(40) + '\n');
-
-  await page.waitForTimeout(1500);
-  await browser.close();
 }
 
 run().catch(err => { console.error(err); process.exit(1); });
